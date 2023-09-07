@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 
 import vertex from "./shader/vertex.glsl"
 import fragment from "./shader/fragment.glsl"
 
 import dat from "dat.gui";
+import smoke from "/img/smoke.png"
 
 export default class Sketch {
     constructor(opstions) {
         this.scene = new THREE.Scene();
+        this.scene.fog = new THREE.FogExp2(0x55cde6, 0.001);
 
         this.container = opstions.dom;
         this.width = this.container.offsetWidth;
@@ -17,29 +18,32 @@ export default class Sketch {
         this.renderer = new THREE.WebGLRenderer();
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setSize(this.width, this.height);
-        this.renderer.setClearColor(0xeeeeee, 1);
+        this.renderer.setClearColor(this.scene.fog.color);
 
         this.container.appendChild(this.renderer.domElement);
 
-
         this.camera = new THREE.PerspectiveCamera(
-            70,
+            60,
             window.innerWidth / window.innerHeight,
-            0.001,
+            1,
             1000.0
         );
-        this.camera.position.set(0.0, 0.0, 2.0);
+        this.camera.position.set(0.0, 0.0, 1.0);
+        this.camera.rotation.set(1.16, -0.12, 0.27);
 
-        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.time = 0;
 
         this.isPlaying = true;
 
+        this.loader = new THREE.TextureLoader();
+        this.clouds = [];
+
+        this.addLight();
         this.addObjects();
-        this.resize();
+        // this.resize();
         this.render();
-        this.setupResize();
-        this.settings();
+        // this.setupResize();
+        // this.settings();
     }
 
     settings() {
@@ -67,34 +71,37 @@ export default class Sketch {
 
     addObjects() {
         let that = this;
-        this.material = new THREE.ShaderMaterial({
-            extensions: {
-                derivatives: "#extension GL_OES_standard_derivatives : enable"
-            },
-            side: THREE.DoubleSide,
-            uniforms: {
-                time: { value: 0 },
-                resolution: { value: new THREE.Vector4() },
-            },
-            // wireframe: true,
-            // transparent: true,
-            vertexShader: vertex,
-            fragmentShader: fragment,
+        this.loader.load(smoke, (texture) => {
+            this.geometry = new THREE.PlaneGeometry(500.0, 500.0);
+            this.material = new THREE.MeshLambertMaterial({
+                map: texture,
+                transparent: true
+            });
+
+            for(let p = 0; p < 10; p++){
+                const cloud = new THREE.Mesh(this.geometry, this.material);
+                cloud.position.set(
+                    Math.random() * 800 - 400,
+                    Math.random() * 800 - 400,
+                    Math.random() * 500 - 500
+                );
+                cloud.rotation.x = 1.16;
+                cloud.rotation.y = -0.12;
+                cloud.rotation.z = Math.random() * 2 * Math.PI;
+                cloud.material.opacity = 0.55;
+                this.clouds.push(cloud);
+                this.scene.add(cloud);
+            }
         });
-
-        this.geometry = new THREE.PlaneGeometry(1.0, 1.0, 1.0, 1.0);
-
-        this.plane = new THREE.Mesh(this.geometry, this.material);
-        this.scene.add(this.plane);
     }
 
     addLight(){
-        const light1 = new THREE.AmbientLight(0xffffff, 0.5);
-        this.scene.add(light1);
+        const ambient = new THREE.AmbientLight(0xffffff);
+        this.scene.add(ambient);
 
-        const light2 = new THREE.DirectionalLight(0xffffff, 0.5);
-        light2.position.set(0.5, 0.0, 0.866)
-        this.scene.add(light2);
+        const directionalLight = new THREE.DirectionalLight(0xffffff);
+        directionalLight.position.set(0.0, 0.0, 1.0);
+        this.scene.add(directionalLight);
     }
 
     stop() {
@@ -111,6 +118,10 @@ export default class Sketch {
     render() {
         if (!this.isPlaying) return;
         this.time += 0.01;
+
+        this.clouds.forEach((cloud) => {
+            cloud.rotation.z -= 0.0003;
+        })
 
         requestAnimationFrame(this.render.bind(this));
         this.renderer.render(this.scene, this.camera);
